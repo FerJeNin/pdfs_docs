@@ -9,26 +9,34 @@
 @media (prefers-color-scheme:dark){:root{--bg:#0f141b;--surface:#18202a;--ink:#e8edf3;--muted:#9aa8b8;--line:#2b3644;--accent:#6ea0ff;--accent-ink:#0b1220;--danger:#ff8a80;--drop:#1b2a44}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Iowan Old Style","Palatino Linotype",Georgia,serif;padding:clamp(16px,4vw,48px)}
-main{max-width:640px;margin:0 auto}
+main{max-width:720px;margin:0 auto}
 h1{font-size:clamp(1.8rem,5vw,2.6rem);line-height:1.1;margin:0 0 .4rem;letter-spacing:-.02em}
-.sub{color:var(--muted);margin:0 0 1.6rem;max-width:52ch}
-button,.btn{font:600 .95rem/1 system-ui,sans-serif;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:.7rem 1rem;border-radius:8px;cursor:pointer}
-button:focus-visible,.drop:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.sub{color:var(--muted);margin:0 0 1.6rem;max-width:56ch}
+button,select{font:600 .95rem/1 system-ui,sans-serif;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:.7rem 1rem;border-radius:8px;cursor:pointer}
+button:focus-visible,select:focus-visible,.drop:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 button:disabled{opacity:.5;cursor:not-allowed}
 .drop{display:block;border:2px dashed var(--line);border-radius:12px;padding:2rem 1rem;text-align:center;background:var(--surface);cursor:pointer;font-family:system-ui,sans-serif;color:var(--muted)}
 .drop.over{background:var(--drop);border-color:var(--accent)}
 .drop strong{color:var(--ink)}
 ol{list-style:none;margin:1.2rem 0;padding:0;display:grid;gap:8px}
-li{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;font-family:system-ui,sans-serif}
-li.dragging{opacity:.4}
+li{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;font-family:system-ui,sans-serif}
 li.target{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .grip{cursor:grab;color:var(--muted);user-select:none;font-size:1.2rem;line-height:1}
-.name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pg{color:var(--muted);font-size:.85rem;white-space:nowrap}
+.name{flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cnt{color:var(--muted);font-size:.85rem;white-space:nowrap}
 li button{padding:.45rem .6rem;font-size:.85rem}
-li button.del{color:var(--danger)}
+.del{color:var(--danger)}
+.strip{display:flex;flex-wrap:wrap;gap:10px;margin-top:.7rem;padding-top:.7rem;border-top:1px solid var(--line)}
+.pcard{width:104px;border:1px solid var(--line);border-radius:8px;padding:4px;text-align:center;background:var(--bg);font-size:.8rem;color:var(--muted)}
+.pcard.target{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.pcard img{display:block;width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff;border-radius:4px;cursor:grab}
+.pcard .ctl{display:flex;justify-content:space-between;gap:2px;margin-top:4px}
+.pcard button{padding:.3rem .4rem;font-size:.75rem;flex:1}
 .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.opt{display:flex;gap:8px;align-items:center;margin:1rem 0 .8rem;font-family:system-ui,sans-serif;flex-wrap:wrap}
+.hint{color:var(--muted);font:.85rem system-ui,sans-serif;margin:.3rem 0 0}
 .status{color:var(--muted);font:.9rem system-ui,sans-serif;margin-top:1rem;min-height:1.3em}
 .status.err{color:var(--danger)}
 .empty{color:var(--muted);font-family:system-ui,sans-serif;text-align:center;margin:1.2rem 0}
@@ -37,7 +45,7 @@ li button.del{color:var(--danger)}
 <body>
 <main>
   <h1>Unir PDFs</h1>
-  <p class="sub">Agrega tus archivos, ordénalos arrastrando y descarga uno solo. Las páginas se copian sin cambios: sin márgenes nuevos ni espacios en blanco. Todo ocurre en tu navegador; los archivos no se suben a ningún servidor.</p>
+  <p class="sub">Agrega tus archivos, ordénalos, reordena o elimina páginas sueltas y descarga uno solo. Las páginas se copian sin márgenes nuevos. Todo ocurre en tu navegador; nada se sube a ningún servidor.</p>
 
   <label class="drop" id="drop" tabindex="0">
     <strong>Elige PDFs</strong> o suéltalos aquí
@@ -47,7 +55,17 @@ li button.del{color:var(--danger)}
   <ol id="list"></ol>
   <p class="empty" id="empty">Aún no hay archivos.</p>
 
-  <div class="bar">
+  <div class="opt">
+    <label for="level"><strong>Peso del archivo:</strong></label>
+    <select id="level">
+      <option value="0">Sin pérdida de calidad</option>
+      <option value="1">Equilibrada (casi idéntica)</option>
+      <option value="2">Máxima compresión</option>
+    </select>
+  </div>
+  <p class="hint" id="hint"></p>
+
+  <div class="bar" style="margin-top:1rem">
     <button class="primary" id="merge" disabled>Combinar y descargar</button>
     <button id="sort" disabled>Ordenar A-Z</button>
     <button id="clear" disabled>Vaciar lista</button>
@@ -56,16 +74,21 @@ li button.del{color:var(--danger)}
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-const { PDFDocument } = PDFLib;
+const { PDFDocument, PDFName, PDFArray, PDFRawStream } = PDFLib;
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const $ = id => document.getElementById(id);
 const files = [];
-let uid = 0, dragFrom = null;
+let uid = 0, drag = null;
 
-function setStatus(msg, err = false) {
-  $('status').textContent = msg;
-  $('status').className = 'status' + (err ? ' err' : '');
-}
+const HINTS = [
+  'Recomprime internamente sin tocar imágenes ni texto. Ahorra poco si el PDF ya venía comprimido.',
+  'Reduce las fotos JPEG a calidad 80 % y máx. 2400 px. El texto y los dibujos no cambian.',
+  'Calidad 60 % y máx. 1600 px en fotos JPEG. Mucho menos peso, con pérdida visible en imágenes.'
+];
+const mb = n => (n / 1048576).toFixed(n < 1048576 * 10 ? 2 : 1) + ' MB';
+function setStatus(msg, err = false) { $('status').textContent = msg; $('status').className = 'status' + (err ? ' err' : ''); }
 
 async function addFiles(fileList) {
   const skipped = [];
@@ -75,17 +98,55 @@ async function addFiles(fileList) {
     try {
       const bytes = await f.arrayBuffer();
       const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-      files.push({ id: ++uid, name: f.name, bytes, pages: doc.getPageCount() });
+      const total = doc.getPageCount();
+      files.push({ id: ++uid, name: f.name, bytes, total, order: [...Array(total).keys()], open: false, thumbs: {}, loading: false });
     } catch (e) { skipped.push(f.name); }
   }
   render();
   setStatus(skipped.length ? 'No se pudieron leer: ' + skipped.join(', ') : '', skipped.length > 0);
 }
 
-function move(i, j) {
+function moveFile(i, j) {
   if (j < 0 || j >= files.length || i === j) return;
   files.splice(j, 0, files.splice(i, 1)[0]);
   render();
+}
+function movePage(f, i, j) {
+  if (j < 0 || j >= f.order.length || i === j) return;
+  f.order.splice(j, 0, f.order.splice(i, 1)[0]);
+  render();
+}
+function delPage(f, j) {
+  f.order.splice(j, 1);
+  if (!f.order.length) files.splice(files.indexOf(f), 1);
+  render();
+}
+
+async function loadThumbs(f) {
+  if (f.loading || !window.pdfjsLib) return;
+  f.loading = true;
+  try {
+    const doc = await pdfjsLib.getDocument({ data: f.bytes.slice(0) }).promise;
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const vp = page.getViewport({ scale: 1 });
+      const s = 200 / vp.width, v = page.getViewport({ scale: s });
+      const c = document.createElement('canvas');
+      c.width = Math.round(v.width); c.height = Math.round(v.height);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+      const url = c.toDataURL('image/jpeg', 0.7);
+      f.thumbs[n - 1] = url;
+      document.querySelectorAll('img[data-k="' + f.id + ':' + (n - 1) + '"]').forEach(im => im.src = url);
+    }
+  } catch (e) { /* sin miniaturas (p. ej. PDF protegido): se usa solo el número de página */ }
+}
+
+function btn(txt, label, fn, cls) {
+  const b = document.createElement('button');
+  b.textContent = txt; b.setAttribute('aria-label', label);
+  if (cls) b.className = cls;
+  b.onclick = e => { e.stopPropagation(); fn(); };
+  return b;
 }
 
 function render() {
@@ -93,33 +154,112 @@ function render() {
   ol.replaceChildren();
   files.forEach((f, i) => {
     const li = document.createElement('li');
-    li.draggable = true;
-    li.innerHTML = '<span class="grip" aria-hidden="true">⋮⋮</span><span class="name"></span><span class="pg"></span>';
-    li.querySelector('.name').textContent = (i + 1) + '. ' + f.name;
-    li.querySelector('.name').title = f.name;
-    li.querySelector('.pg').textContent = f.pages + (f.pages === 1 ? ' pág.' : ' págs.');
-    for (const [txt, label, fn, cls] of [
-      ['▲', 'Subir', () => move(i, i - 1)],
-      ['▼', 'Bajar', () => move(i, i + 1)],
-      ['✕', 'Quitar', () => { files.splice(i, 1); render(); }, 'del'],
-    ]) {
-      const b = document.createElement('button');
-      b.textContent = txt; b.setAttribute('aria-label', label + ' ' + f.name);
-      if (cls) b.className = cls;
-      b.onclick = fn; li.appendChild(b);
-    }
-    li.ondragstart = e => { dragFrom = i; li.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
-    li.ondragend = () => { dragFrom = null; render(); };
-    li.ondragover = e => { if (dragFrom === null) return; e.preventDefault(); li.classList.add('target'); };
+    const row = document.createElement('div');
+    row.className = 'row'; row.draggable = true;
+    row.innerHTML = '<span class="grip" aria-hidden="true">⋮⋮</span><span class="name"></span><span class="cnt"></span>';
+    row.querySelector('.name').textContent = (i + 1) + '. ' + f.name;
+    row.querySelector('.name').title = f.name;
+    row.querySelector('.cnt').textContent = (f.order.length < f.total ? f.order.length + ' de ' + f.total : f.total) + (f.total === 1 ? ' pág.' : ' págs.');
+    row.append(
+      btn(f.open ? 'Páginas ▴' : 'Páginas ▾', 'Editar páginas de ' + f.name, () => { f.open = !f.open; if (f.open) loadThumbs(f); render(); }),
+      btn('▲', 'Subir ' + f.name, () => moveFile(i, i - 1)),
+      btn('▼', 'Bajar ' + f.name, () => moveFile(i, i + 1)),
+      btn('✕', 'Quitar ' + f.name, () => { files.splice(i, 1); render(); }, 'del')
+    );
+    row.ondragstart = e => { drag = { t: 'f', i }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); };
+    row.ondragend = () => { drag = null; render(); };
+    li.ondragover = e => { if (drag && drag.t === 'f') { e.preventDefault(); li.classList.add('target'); } };
     li.ondragleave = () => li.classList.remove('target');
-    li.ondrop = e => { if (dragFrom === null) return; e.preventDefault(); move(dragFrom, i); dragFrom = null; };
+    li.ondrop = e => { if (drag && drag.t === 'f') { e.preventDefault(); moveFile(drag.i, i); drag = null; } };
+    li.appendChild(row);
+
+    if (f.open) {
+      const strip = document.createElement('div');
+      strip.className = 'strip';
+      f.order.forEach((idx, j) => {
+        const p = document.createElement('div');
+        p.className = 'pcard'; p.draggable = true;
+        const im = document.createElement('img');
+        im.alt = 'Página ' + (idx + 1); im.draggable = false; im.dataset.k = f.id + ':' + idx;
+        if (f.thumbs[idx]) im.src = f.thumbs[idx];
+        const lab = document.createElement('div');
+        lab.textContent = 'Pág. ' + (idx + 1);
+        const ctl = document.createElement('div');
+        ctl.className = 'ctl';
+        ctl.append(btn('◀', 'Mover página antes', () => movePage(f, j, j - 1)), btn('▶', 'Mover página después', () => movePage(f, j, j + 1)), btn('✕', 'Eliminar página ' + (idx + 1), () => delPage(f, j), 'del'));
+        p.append(im, lab, ctl);
+        p.ondragstart = e => { e.stopPropagation(); drag = { t: 'p', f: f.id, i: j }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); };
+        p.ondragend = () => { drag = null; render(); };
+        p.ondragover = e => { if (drag && drag.t === 'p' && drag.f === f.id) { e.preventDefault(); e.stopPropagation(); p.classList.add('target'); } };
+        p.ondragleave = () => p.classList.remove('target');
+        p.ondrop = e => { if (drag && drag.t === 'p' && drag.f === f.id) { e.preventDefault(); e.stopPropagation(); movePage(f, drag.i, j); drag = null; } };
+        strip.appendChild(p);
+      });
+      li.appendChild(strip);
+    }
     ol.appendChild(li);
   });
   const has = files.length > 0;
   $('empty').hidden = has;
-  $('merge').disabled = files.length < 2;
+  $('merge').disabled = !has;
   $('sort').disabled = !has;
   $('clear').disabled = !has;
+  $('hint').textContent = HINTS[+$('level').value];
+}
+
+/* ---- Optimización ---- */
+async function deflate(bytes) {
+  const s = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+function comps(ctx, cs) {
+  cs = cs && ctx.lookup(cs);
+  if (cs instanceof PDFName) return { DeviceRGB: 3, DeviceGray: 1 }[cs.decodeText()] || 0;
+  if (cs instanceof PDFArray && ctx.lookup(cs.get(0)).decodeText && ctx.lookup(cs.get(0)).decodeText() === 'ICCBased') {
+    const n = ctx.lookup(cs.get(1)).dict.get(PDFName.of('N'));
+    return n ? n.asNumber() : 0;
+  }
+  return 0;
+}
+async function optimize(out, level, progress) {
+  const ctx = out.context, N = n => PDFName.of(n);
+  const cfg = [null, { q: 0.8, cap: 2400 }, { q: 0.6, cap: 1600 }][level];
+  const items = ctx.enumerateIndirectObjects().filter(([, o]) => o instanceof PDFRawStream);
+  let k = 0;
+  for (const [ref, s] of items) {
+    if (++k % 5 === 0) { progress(k, items.length); await new Promise(r => setTimeout(r)); }
+    try {
+      const d = s.dict, orig = s.getContents(), filter = d.get(N('Filter'));
+      // 1) Sin pérdida: comprimir flujos que no tenían compresión
+      if (!filter && orig.length > 512 && window.CompressionStream) {
+        const z = await deflate(orig);
+        if (z.length < orig.length * 0.95) {
+          d.set(N('Filter'), N('FlateDecode')); d.set(N('Length'), ctx.obj(z.length));
+          ctx.assign(ref, PDFRawStream.of(d, z));
+        }
+        continue;
+      }
+      // 2) Con pérdida controlada: recomprimir fotos JPEG
+      if (cfg && d.get(N('Subtype')) === N('Image') && filter === N('DCTDecode') &&
+          !d.get(N('Decode')) && !d.get(N('Mask')) && !d.get(N('ImageMask'))) {
+        const c = comps(ctx, d.get(N('ColorSpace')));
+        if (c !== 1 && c !== 3) continue;
+        const w = d.get(N('Width')).asNumber(), h = d.get(N('Height')).asNumber();
+        const sc = Math.min(1, cfg.cap / Math.max(w, h));
+        const w2 = Math.max(1, Math.round(w * sc)), h2 = Math.max(1, Math.round(h * sc));
+        const bmp = await createImageBitmap(new Blob([orig], { type: 'image/jpeg' }), { imageOrientation: 'none' });
+        const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2;
+        const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w2, h2); g.drawImage(bmp, 0, 0, w2, h2);
+        const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', cfg.q));
+        const nb = new Uint8Array(await blob.arrayBuffer());
+        if (nb.length < orig.length * 0.9) {
+          const nd = ctx.obj({ Type: 'XObject', Subtype: 'Image', Width: w2, Height: h2, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode', Length: nb.length });
+          const sm = d.get(N('SMask')); if (sm) nd.set(N('SMask'), sm);
+          ctx.assign(ref, PDFRawStream.of(nd, nb));
+        }
+      }
+    } catch (e) { /* si un objeto falla, se deja como estaba */ }
+  }
 }
 
 async function merge() {
@@ -129,16 +269,19 @@ async function merge() {
     const out = await PDFDocument.create();
     for (const f of files) {
       const src = await PDFDocument.load(f.bytes, { ignoreEncryption: true });
-      const pages = await out.copyPages(src, src.getPageIndices());
+      const pages = await out.copyPages(src, f.order);
       pages.forEach(p => out.addPage(p));
     }
-    const blob = new Blob([await out.save()], { type: 'application/pdf' });
+    await optimize(out, +$('level').value, (k, n) => setStatus('Optimizando… ' + k + '/' + n));
+    const bytes = await out.save({ useObjectStreams: true });
+    const blob = new Blob([bytes], { type: 'application/pdf' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'combinado.pdf';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    setStatus('Listo: combinado.pdf con ' + out.getPageCount() + ' páginas.');
+    const orig = files.reduce((t, f) => t + f.bytes.byteLength, 0);
+    setStatus('Listo: combinado.pdf, ' + out.getPageCount() + ' páginas, ' + mb(bytes.length) + ' (archivos originales: ' + mb(orig) + ').');
   } catch (e) {
     setStatus('No se pudo combinar: ' + e.message, true);
   }
@@ -151,6 +294,7 @@ drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefau
 ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+$('level').onchange = () => { $('hint').textContent = HINTS[+$('level').value]; };
 $('merge').onclick = merge;
 $('sort').onclick = () => { files.sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true })); render(); };
 $('clear').onclick = () => { files.length = 0; render(); setStatus(''); };
