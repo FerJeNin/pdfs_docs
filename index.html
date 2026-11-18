@@ -71,12 +71,13 @@ li button{padding:.45rem .6rem;font-size:.85rem}
     <button id="clear" disabled>Vaciar lista</button>
   </div>
   <p class="status" id="status" role="status"></p>
+  <p class="hint" id="detail"></p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-const { PDFDocument, PDFName, PDFArray, PDFRawStream } = PDFLib;
+const { PDFDocument, PDFName, PDFArray, PDFDict, PDFRawStream } = PDFLib;
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const $ = id => document.getElementById(id);
 const files = [];
@@ -221,15 +222,35 @@ function comps(ctx, cs) {
   }
   return 0;
 }
+async function inflate(bytes) {
+  const s = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+function unpredict(raw, w, h, bpp) { // deshace los filtros PNG (Predictor >= 10)
+  const rl = w * bpp, out = new Uint8Array(rl * h);
+  for (let y = 0; y < h; y++) {
+    const ft = raw[y * (rl + 1)], si = y * (rl + 1) + 1, di = y * rl;
+    for (let x = 0; x < rl; x++) {
+      const a = x >= bpp ? out[di + x - bpp] : 0, b = y ? out[di - rl + x] : 0, c = x >= bpp && y ? out[di - rl + x - bpp] : 0;
+      let v = raw[si + x];
+      if (ft === 1) v += a; else if (ft === 2) v += b; else if (ft === 3) v += (a + b) >> 1;
+      else if (ft === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c); }
+      out[di + x] = v & 255;
+    }
+  }
+  return out;
+}
 async function optimize(out, level, progress) {
   const ctx = out.context, N = n => PDFName.of(n);
   const cfg = [null, { q: 0.8, cap: 2400 }, { q: 0.6, cap: 1600 }][level];
+  const st = { jpg: [0, 0, 0], flate: [0, 0, 0], otras: [0, 0], fuentes: 0, err: '' };
   const items = ctx.enumerateIndirectObjects().filter(([, o]) => o instanceof PDFRawStream);
   let k = 0;
   for (const [ref, s] of items) {
     if (++k % 5 === 0) { progress(k, items.length); await new Promise(r => setTimeout(r)); }
     try {
       const d = s.dict, orig = s.getContents(), filter = d.get(N('Filter'));
+      if (d.get(N('Length1'))) st.fuentes += orig.length;
       // 1) Sin pérdida: comprimir flujos que no tenían compresión
       if (!filter && orig.length > 512 && window.CompressionStream) {
         const z = await deflate(orig);
@@ -239,32 +260,55 @@ async function optimize(out, level, progress) {
         }
         continue;
       }
-      // 2) Con pérdida controlada: recomprimir fotos JPEG
-      if (cfg && d.get(N('Subtype')) === N('Image') && filter === N('DCTDecode') &&
-          !d.get(N('Decode')) && !d.get(N('Mask')) && !d.get(N('ImageMask'))) {
-        const c = comps(ctx, d.get(N('ColorSpace')));
-        if (c !== 1 && c !== 3) continue;
-        const w = d.get(N('Width')).asNumber(), h = d.get(N('Height')).asNumber();
-        const sc = Math.min(1, cfg.cap / Math.max(w, h));
-        const w2 = Math.max(1, Math.round(w * sc)), h2 = Math.max(1, Math.round(h * sc));
-        const bmp = await createImageBitmap(new Blob([orig], { type: 'image/jpeg' }), { imageOrientation: 'none' });
-        const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2;
-        const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w2, h2); g.drawImage(bmp, 0, 0, w2, h2);
-        const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', cfg.q));
-        const nb = new Uint8Array(await blob.arrayBuffer());
-        if (nb.length < orig.length * 0.9) {
-          const nd = ctx.obj({ Type: 'XObject', Subtype: 'Image', Width: w2, Height: h2, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode', Length: nb.length });
-          const sm = d.get(N('SMask')); if (sm) nd.set(N('SMask'), sm);
-          ctx.assign(ref, PDFRawStream.of(nd, nb));
+      if (d.get(N('Subtype')) !== N('Image')) continue;
+      const kind = filter === N('DCTDecode') ? st.jpg : filter === N('FlateDecode') ? st.flate : null;
+      if (!kind) { st.otras[0]++; st.otras[1] += orig.length; continue; }
+      kind[0]++; kind[1] += orig.length;
+      // 2) Con pérdida controlada: recomprimir fotos como JPEG
+      const im = d.get(N('ImageMask'));
+      if (!cfg || d.get(N('Decode')) || d.get(N('Mask')) || (im && String(im) === 'true')) continue;
+      const c = comps(ctx, d.get(N('ColorSpace')));
+      if (c !== 1 && c !== 3) continue;
+      const w = d.get(N('Width')).asNumber(), h = d.get(N('Height')).asNumber();
+      let srcImg;
+      if (kind === st.jpg) {
+        const blob = new Blob([orig], { type: 'image/jpeg' });
+        try { srcImg = await createImageBitmap(blob, { imageOrientation: 'none' }); } catch (e) { srcImg = await createImageBitmap(blob); }
+      } else {
+        const bpc = d.get(N('BitsPerComponent')); if (!bpc || bpc.asNumber() !== 8 || w * h > 40e6) continue;
+        const dp = ctx.lookup(d.get(N('DecodeParms')));
+        let pred = 1;
+        if (dp instanceof PDFDict) { const p = dp.get(N('Predictor')); pred = p ? p.asNumber() : 1; } else if (dp && !(dp instanceof PDFArray && dp.size() === 0)) continue;
+        if (pred === 2 || (pred > 1 && pred < 10)) continue;
+        const raw = await inflate(orig), pix = pred >= 10 ? unpredict(raw, w, h, c) : raw;
+        if (pix.length < w * h * c) continue;
+        const idt = new ImageData(w, h);
+        for (let i = 0, n = w * h; i < n; i++) {
+          idt.data[4 * i] = pix[c * i]; idt.data[4 * i + 1] = pix[c * i + (c === 3 ? 1 : 0)]; idt.data[4 * i + 2] = pix[c * i + (c === 3 ? 2 : 0)]; idt.data[4 * i + 3] = 255;
         }
+        srcImg = document.createElement('canvas'); srcImg.width = w; srcImg.height = h;
+        srcImg.getContext('2d').putImageData(idt, 0, 0);
       }
-    } catch (e) { /* si un objeto falla, se deja como estaba */ }
+      const sc = Math.min(1, cfg.cap / Math.max(w, h));
+      const w2 = Math.max(1, Math.round(w * sc)), h2 = Math.max(1, Math.round(h * sc));
+      const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2;
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w2, h2); g.drawImage(srcImg, 0, 0, w2, h2);
+      const blob2 = await new Promise(r => cv.toBlob(r, 'image/jpeg', cfg.q));
+      const nb = new Uint8Array(await blob2.arrayBuffer());
+      if (nb.length < orig.length * 0.9) {
+        const nd = ctx.obj({ Type: 'XObject', Subtype: 'Image', Width: w2, Height: h2, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode', Length: nb.length });
+        const sm = d.get(N('SMask')); if (sm) nd.set(N('SMask'), sm);
+        ctx.assign(ref, PDFRawStream.of(nd, nb));
+        kind[2]++;
+      }
+    } catch (e) { if (!st.err) st.err = e.message || String(e); }
   }
+  return st;
 }
 
 async function merge() {
   $('merge').disabled = true;
-  setStatus('Combinando…');
+  setStatus('Combinando…'); $('detail').textContent = '';
   try {
     const out = await PDFDocument.create();
     for (const f of files) {
@@ -272,7 +316,7 @@ async function merge() {
       const pages = await out.copyPages(src, f.order);
       pages.forEach(p => out.addPage(p));
     }
-    await optimize(out, +$('level').value, (k, n) => setStatus('Optimizando… ' + k + '/' + n));
+    const st = await optimize(out, +$('level').value, (k, n) => setStatus('Optimizando… ' + k + '/' + n));
     const bytes = await out.save({ useObjectStreams: true });
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const a = document.createElement('a');
@@ -280,6 +324,7 @@ async function merge() {
     a.download = 'combinado.pdf';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    $('detail').textContent = 'Detalle: fotos JPEG ' + st.jpg[0] + ' (' + mb(st.jpg[1]) + ', recomprimidas ' + st.jpg[2] + ') · imágenes Flate ' + st.flate[0] + ' (' + mb(st.flate[1]) + ', recomprimidas ' + st.flate[2] + ') · otras imágenes ' + st.otras[0] + ' (' + mb(st.otras[1]) + ') · fuentes ' + mb(st.fuentes) + (st.err ? ' · error: ' + st.err : '');
     const orig = files.reduce((t, f) => t + f.bytes.byteLength, 0);
     setStatus('Listo: combinado.pdf, ' + out.getPageCount() + ' páginas, ' + mb(bytes.length) + ' (archivos originales: ' + mb(orig) + ').');
   } catch (e) {
