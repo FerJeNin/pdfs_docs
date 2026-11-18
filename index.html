@@ -69,7 +69,8 @@ function setStatus(msg, err = false) {
 
 async function addFiles(fileList) {
   const skipped = [];
-  for (const f of fileList) {
+  const lista = Array.from(fileList); // copia: la FileList original se vacía tras el evento
+  for (const f of lista) {
     if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { skipped.push(f.name); continue; }
     try {
       const bytes = await f.arrayBuffer();
