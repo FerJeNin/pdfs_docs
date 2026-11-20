@@ -28,10 +28,11 @@ li.target{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
 .cnt{color:var(--muted);font-size:.85rem;white-space:nowrap}
 li button{padding:.45rem .6rem;font-size:.85rem}
 .del{color:var(--danger)}
-.strip{display:flex;flex-wrap:wrap;gap:10px;margin-top:.7rem;padding-top:.7rem;border-top:1px solid var(--line)}
+.strip{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-top:.7rem;padding-top:.7rem;border-top:1px solid var(--line)}
 .pcard{width:104px;border:1px solid var(--line);border-radius:8px;padding:4px;text-align:center;background:var(--bg);font-size:.8rem;color:var(--muted)}
 .pcard.target{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
-.pcard img{display:block;width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff;border-radius:4px;cursor:grab}
+.pcard img{display:block;width:100%;height:auto;background:#fff;border-radius:4px;cursor:grab}
+.pcard img:not([src]){aspect-ratio:3/4}
 .pcard .ctl{display:flex;justify-content:space-between;gap:2px;margin-top:4px}
 .pcard button{padding:.3rem .4rem;font-size:.75rem;flex:1}
 .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
